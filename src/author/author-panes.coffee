@@ -1,4 +1,5 @@
 {dumbSingularize} = require '../singularize'
+{expressionParser} = require './expressionParser'
 
 AuthorPane = exports.AuthorPane =
 
@@ -12,7 +13,8 @@ AuthorPane = exports.AuthorPane =
 
 class GraphPane
 
-  constructor: ({@title, @xLabel, @xUnits, @xMin, @xMax, @xTicks, @yLabel, @yUnits, @yMin, @yMax, @yTicks, includeAnnotationsFrom }) ->
+  constructor: ({@title, @xLabel, @xUnits, @xMin, @xMax, @xTicks, @yLabel, @yUnits, @yMin, @yMax, @yTicks,includeAnnotationsFrom , @xPrecision, @yPrecision, 
+    @showCrossHairs, @showGraphGrid, @showToolTipCoords, @expression, @lineType, @pointType, @lineSnapDistance}) ->
     @annotationSources = includeAnnotationsFrom?.map (source) ->
       [page, pane] = (source.match /^page\/(\d)+\/pane\/(\d)+$/)[1..2].map (s) -> parseInt(s, 10) - 1
       { page, pane }
@@ -54,6 +56,27 @@ AuthorPane.classFor['PredefinedGraphPane'] = class PredefinedGraphPane extends G
 
   constructor: ({@data}) ->
     super
+    @annotation = null
+
+  addToPageAndActivity: (runtimePage, runtimeActivity) ->
+    super
+    if @expression isnt null and @lineType isnt "none"
+      expressionData = expressionParser.parseExpression(@expression)
+      @annotation = runtimeActivity.createAndAppendAnnotation {
+        type: 'LinearEquation',
+        index: @index,
+        xInterval: @xPrecision,
+        lineSnapDistance: @lineSnapDistance,
+        expressionForm: expressionData.form,
+        params: expressionData.params
+      }
+
+  addToStep: (step) ->
+    super
+    if @expression isnt null and @lineType isnt "none"
+      step.addAnnotationToPane({ @index, @annotation })
+      step.addGraphingTool({ @index, @datadefRef, @annotation })
+    step
 
 
 AuthorPane.classFor['SensorGraphPane'] = class SensorGraphPane extends GraphPane

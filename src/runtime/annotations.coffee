@@ -117,6 +117,23 @@ AnnotationCollection.classFor["FreehandSketch"] = exports.FreehandSketch = class
 
     hash
 
+AnnotationCollection.classFor['LinearEquation'] = exports.LinearEquation = class LinearEquation extends Annotation
+
+  RECORD_TYPE: 'LinearEquation'
+
+  constructor: ({ @color, @xInterval, @lineSnapDistance, @expressionForm, @index, @params }) ->
+    @name = "linear-equation-#{@index}"
+  
+  toHash: -> 
+    hash = super()
+    hash.color            = '#CC0000'
+    hash.xInterval        = @xInterval
+    hash.lineSnapDistance = @lineSnapDistance
+    hash.expressionForm   = @expressionForm
+    hash.params           = @params
+
+    hash
+
 annotations = [
 
 ]
