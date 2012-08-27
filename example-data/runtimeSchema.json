@@ -343,7 +343,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["HighlightedPoint", "SegmentOverlay", "CircledPoint", "LineToAxis", "FreehandSketch", "RunArrow", "RiseArrow", "RunBracket", "RiseBracket", "LineThroughPoints"]
+            "enum": ["HighlightedPoint", "SegmentOverlay", "CircledPoint", "LineToAxis", "FreehandSketch", "RunArrow", "RiseArrow", "RunBracket", "RiseBracket", "LineThroughPoints", "LinearEquation"]
           },
           "records": {
             "type": "array",
@@ -393,6 +393,32 @@
                 "isUnboundedRight": {
                   "type": "boolean",
                   "optional": true
+                },
+                "xInterval": {
+                  "type": "number",
+                  "optional": true
+                },
+                "lineSnapDistance": {
+                  "type": "number",
+                  "optional": true
+                },
+                "expressionForm": {
+                  "type": "string",
+                  "enum": ["slope-intercept"],
+                  "optional": true
+                },
+                "params": {
+                  "type": "object",
+                  "properties": {
+                    "slope": {
+                      "type": "number",
+                      "optional": true
+                    },
+                    "yIntercept": {
+                      "type": "number",
+                      "optional": true
+                    }
+                  }
                 }
               }
             }
