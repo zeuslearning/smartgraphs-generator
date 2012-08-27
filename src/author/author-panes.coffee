@@ -33,7 +33,7 @@ class GraphPane
       runtimeActivity.defineDatadef dataKey, datadef
 
   addToStep: (step) ->
-    step.addGraphPane { @title, @datadefRef, @xAxis, @yAxis, @index }
+    step.addGraphPane { @title, @datadefRef, @xAxis, @yAxis, @index, @showCrossHairs, @showGraphGrid, @showToolTipCoords }
 
     @annotationSources?.forEach (source) =>
       pages = @page.activity.pages
@@ -60,22 +60,24 @@ AuthorPane.classFor['PredefinedGraphPane'] = class PredefinedGraphPane extends G
 
   addToPageAndActivity: (runtimePage, runtimeActivity) ->
     super
-    if @expression isnt null and @lineType isnt "none"
+    if @expression isnt null and @expression isnt undefined and @lineType isnt "none" and @lineType  isnt undefined
       expressionData = expressionParser.parseExpression(@expression)
-      @annotation = runtimeActivity.createAndAppendAnnotation {
-        type: 'LinearEquation',
-        index: @index,
-        xInterval: @xPrecision,
-        lineSnapDistance: @lineSnapDistance,
-        expressionForm: expressionData.form,
-        params: expressionData.params
-      }
+      if expressionData.type? and expressionData.type isnt "not supported"
+        @annotation = runtimeActivity.createAndAppendAnnotation {
+          type: expressionData.type,
+          index: @index,
+          xInterval: @xPrecision,
+          lineSnapDistance: @lineSnapDistance,
+          expressionForm: expressionData.form,
+          params: expressionData.params
+        }
 
   addToStep: (step) ->
     super
-    if @expression isnt null and @lineType isnt "none"
-      step.addAnnotationToPane({ @index, @annotation })
-      step.addGraphingTool({ @index, @datadefRef, @annotation })
+    if @expression isnt null and @expression isnt undefined and @lineType isnt "none" and @lineType  isnt undefined
+      if @annotation isnt null 
+        step.addAnnotationToPane({ @index, @annotation })
+        step.addGraphingTool({ @index, @datadefRef, @annotation })
     step
 
 

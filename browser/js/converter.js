@@ -1015,7 +1015,10 @@ require.define("/author/author-panes.js", function (require, module, exports, __
         datadefRef: this.datadefRef,
         xAxis: this.xAxis,
         yAxis: this.yAxis,
-        index: this.index
+        index: this.index,
+        showCrossHairs: this.showCrossHairs,
+        showGraphGrid: this.showGraphGrid,
+        showToolTipCoords: this.showToolTipCoords
       });
       return (_ref = this.annotationSources) != null ? _ref.forEach(function(source) {
         var page, pages, pane;
@@ -1055,31 +1058,35 @@ require.define("/author/author-panes.js", function (require, module, exports, __
     PredefinedGraphPane.prototype.addToPageAndActivity = function(runtimePage, runtimeActivity) {
       var expressionData;
       PredefinedGraphPane.__super__.addToPageAndActivity.apply(this, arguments);
-      if (this.expression !== null && this.lineType !== "none") {
+      if (this.expression !== null && this.expression !== void 0 && this.lineType !== "none" && this.lineType !== void 0) {
         expressionData = expressionParser.parseExpression(this.expression);
-        return this.annotation = runtimeActivity.createAndAppendAnnotation({
-          type: 'LinearEquation',
-          index: this.index,
-          xInterval: this.xPrecision,
-          lineSnapDistance: this.lineSnapDistance,
-          expressionForm: expressionData.form,
-          params: expressionData.params
-        });
+        if ((expressionData.type != null) && expressionData.type !== "not supported") {
+          return this.annotation = runtimeActivity.createAndAppendAnnotation({
+            type: expressionData.type,
+            index: this.index,
+            xInterval: this.xPrecision,
+            lineSnapDistance: this.lineSnapDistance,
+            expressionForm: expressionData.form,
+            params: expressionData.params
+          });
+        }
       }
     };
 
     PredefinedGraphPane.prototype.addToStep = function(step) {
       PredefinedGraphPane.__super__.addToStep.apply(this, arguments);
-      if (this.expression !== null && this.lineType !== "none") {
-        step.addAnnotationToPane({
-          index: this.index,
-          annotation: this.annotation
-        });
-        step.addGraphingTool({
-          index: this.index,
-          datadefRef: this.datadefRef,
-          annotation: this.annotation
-        });
+      if (this.expression !== null && this.expression !== void 0 && this.lineType !== "none" && this.lineType !== void 0) {
+        if (this.annotation !== null) {
+          step.addAnnotationToPane({
+            index: this.index,
+            annotation: this.annotation
+          });
+          step.addGraphingTool({
+            index: this.index,
+            datadefRef: this.datadefRef,
+            annotation: this.annotation
+          });
+        }
       }
       return step;
     };
@@ -1233,12 +1240,12 @@ require.define("/author/expressionParser.js", function (require, module, exports
     linearConstantRegExPattern = new RegExp('^y=([+-]?' + regExpNum + ')$', 'i');
     linearRegExPattern = new RegExp('^y=(?:(' + regExpNumberMultiplier + ')x)(' + regExpConstant + ')?$', 'i');
     if (linearConstantRegExPattern.test(this.expression)) {
-      expressionData['type'] = 'linear';
+      expressionData['type'] = 'LinearEquation';
       expressionData['form'] = 'slope-intercept';
       params['slope'] = 0;
       params['yIntercept'] = parseFloat(RegExp.$1);
     } else if (linearRegExPattern.test(this.expression)) {
-      expressionData['type'] = 'linear';
+      expressionData['type'] = 'LinearEquation';
       expressionData['form'] = 'slope-intercept';
       if (parseFloat(RegExp.$1) || parseFloat(RegExp.$1) === 0) {
         params['slope'] = parseFloat(RegExp.$1);
@@ -1252,6 +1259,8 @@ require.define("/author/expressionParser.js", function (require, module, exports
       } else {
         params['yIntercept'] = parseFloat(RegExp.$2);
       }
+    } else {
+      expressionData['type'] = 'not supported';
     }
     expressionData['params'] = params;
     return expressionData;
