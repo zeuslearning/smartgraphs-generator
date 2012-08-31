@@ -154,14 +154,14 @@ exports.SlopeToolSequence = class SlopeToolSequence
     @tolerance,
     @page
     }) ->
-      @precision = 2; # TODO calculate or lookup precision from DB.
-      @slopeVariableName = "slope" unless @slopeVariableName and @slopeVariableName.length > 0
-      @runtimeStepsByName = {}
-      @slope = (@yMax - @yMin) / (@xMax - @xMin)
-      @steps=[]
-      for pane, i in @page.panes || []
-        @graphPane = pane if pane instanceof AuthorPane.classFor['PredefinedGraphPane']
-        @tablePane = pane if pane instanceof AuthorPane.classFor['TablePane']
+    @precision = 2; # TODO calculate or lookup precision from DB.
+    @slopeVariableName = "slope" unless @slopeVariableName and @slopeVariableName.length > 0
+    @runtimeStepsByName = {}
+    @slope = (@yMax - @yMin) / (@xMax - @xMin)
+    @steps=[]
+    for pane, i in @page.panes || []
+      @graphPane = pane if pane instanceof AuthorPane.classFor['PredefinedGraphPane']
+      @tablePane = pane if pane instanceof AuthorPane.classFor['TablePane']
 
 
   getRequiresGraphOrTable: ->
