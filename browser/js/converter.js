@@ -382,16 +382,36 @@ require.define("/author/author-activity.js", function (require, module, exports,
     }
 
     AuthorActivity.prototype.toRuntimeActivity = function() {
-      var page, runtimeActivity, runtimeUnit, unit, _i, _j, _len, _len2, _ref, _ref2;
-      runtimeActivity = new RuntimeActivity(this.owner, this.name, this.authorName, this.hash.datasets);
-      _ref = this.units;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        unit = _ref[_i];
+      var i, label, labelObject, labelSet, labelsArray, page, runtimeActivity, runtimeUnit, unit, _i, _j, _k, _len, _len2, _len3, _len4, _ref, _ref2, _ref3, _ref4;
+      runtimeActivity = new RuntimeActivity(this.owner, this.name, this.authorName, this.hash.datasets, this.hash.labelSets);
+      if (this.hash.labelSets) {
+        _ref = this.hash.labelSets;
+        for (i = 0, _len = _ref.length; i < _len; i++) {
+          labelSet = _ref[i];
+          labelsArray = [];
+          _ref2 = labelSet.labels;
+          for (_i = 0, _len2 = _ref2.length; _i < _len2; _i++) {
+            label = _ref2[_i];
+            label.type = 'Label';
+            label.namePrefix = labelSet.name;
+            labelObject = runtimeActivity.createAndAppendAnnotation(label);
+            labelsArray.push(labelObject.getUrl());
+          }
+          runtimeActivity.createAndAppendAnnotation({
+            name: labelSet.name,
+            labels: labelsArray,
+            type: 'LabelSet'
+          });
+        }
+      }
+      _ref3 = this.units;
+      for (_j = 0, _len3 = _ref3.length; _j < _len3; _j++) {
+        unit = _ref3[_j];
         runtimeActivity.defineUnit((runtimeUnit = unit.toRuntimeUnit(runtimeActivity)).name, runtimeUnit);
       }
-      _ref2 = this.pages;
-      for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
-        page = _ref2[_j];
+      _ref4 = this.pages;
+      for (_k = 0, _len4 = _ref4.length; _k < _len4; _k++) {
+        page = _ref4[_k];
         runtimeActivity.appendPage(page.toRuntimePage(runtimeActivity));
       }
       return runtimeActivity;
@@ -518,9 +538,11 @@ require.define("/author/sequences.js", function (require, module, exports, __dir
     }
 
     NoSequence.prototype.appendSteps = function(runtimePage) {
-      var i, isActiveInputPane, n, numSteps, pane, previousAnnotation, step, steps, _len, _ref;
+      var i, isActiveInputPane, n, numSteps, pane, previousAnnotation, runtimeActivity, step, steps, _len, _ref;
       steps = [];
       numSteps = this.predictionPanes.length || 1;
+      runtimeActivity = runtimePage.activity;
+      this.annotations = [];
       for (n = 0; 0 <= numSteps ? n < numSteps : n > numSteps; 0 <= numSteps ? n++ : n--) {
         step = runtimePage.appendStep();
         if (n !== 0) steps[n - 1].setDefaultBranch(step);
@@ -830,6 +852,37 @@ require.define("/author/sequences.js", function (require, module, exports, __dir
       return ["coordinatesInRange", this.tag.name, this.correctAnswerRange.xMin, this.correctAnswerRange.yMin, this.correctAnswerRange.xMax, this.correctAnswerRange.yMax];
     };
 
+    PickAPointSequence.prototype.appendStepsWithModifier = function(runtimePage, modifyForSequenceType) {
+      var index, runtimeActivity, step, steps, _len, _results;
+      PickAPointSequence.__super__.appendStepsWithModifier.apply(this, arguments);
+      runtimeActivity = runtimePage.activity;
+      if (this.initialPrompt.label) {
+        this.label = runtimeActivity.createAndAppendAnnotation({
+          type: 'Label',
+          name: this.initialPrompt.label,
+          text: 'New Label'
+        });
+        steps = runtimePage.steps;
+        _results = [];
+        for (index = 0, _len = steps.length; index < _len; index++) {
+          step = steps[index];
+          if (index !== 0) {
+            if (this.graphPane != null) {
+              _results.push(step.addAnnotationToPane({
+                annotation: this.label,
+                index: this.graphPane.index
+              }));
+            } else {
+              _results.push(void 0);
+            }
+          } else {
+            _results.push(void 0);
+          }
+        }
+        return _results;
+      }
+    };
+
     PickAPointSequence.prototype.appendSteps = function(runtimePage) {
       var datadefRef, modifierForSequenceType, runtimeActivity,
         _this = this;
@@ -843,10 +896,25 @@ require.define("/author/sequences.js", function (require, module, exports, __dir
         color: this.HIGHLIGHT_COLOR
       });
       modifierForSequenceType = function(step) {
-        step.addTaggingTool({
-          tag: _this.tag,
-          datadefRef: _this.datadefRef
-        });
+        if (_this.initialPrompt.label) {
+          step.addLabelTool({
+            labelName: _this.initialPrompt.label,
+            index: _this.graphPane.index,
+            datadefRef: _this.datadefRef,
+            markOnDataPoints: true,
+            allowCoordinatesChange: true
+          });
+          step.addTaggingTool({
+            tag: _this.tag,
+            datadefRef: _this.datadefRef,
+            labelName: _this.initialPrompt.label
+          });
+        } else {
+          step.addTaggingTool({
+            tag: _this.tag,
+            datadefRef: _this.datadefRef
+          });
+        }
         if (_this.graphPane != null) {
           step.addAnnotationToPane({
             annotation: _this.highlightedPoint,
@@ -961,12 +1029,13 @@ require.define("/author/author-panes.js", function (require, module, exports, __
 
     function GraphPane(_arg) {
       var includeAnnotationsFrom;
-      this.title = _arg.title, this.xLabel = _arg.xLabel, this.xMin = _arg.xMin, this.xMax = _arg.xMax, this.xTicks = _arg.xTicks, this.yLabel = _arg.yLabel, this.yMin = _arg.yMin, this.yMax = _arg.yMax, this.yTicks = _arg.yTicks, includeAnnotationsFrom = _arg.includeAnnotationsFrom, this.showCrossHairs = _arg.showCrossHairs, this.showGraphGrid = _arg.showGraphGrid, this.showToolTipCoords = _arg.showToolTipCoords, this.includedDataSets = _arg.includedDataSets;
+      this.title = _arg.title, this.xLabel = _arg.xLabel, this.xMin = _arg.xMin, this.xMax = _arg.xMax, this.xTicks = _arg.xTicks, this.yLabel = _arg.yLabel, this.yMin = _arg.yMin, this.yMax = _arg.yMax, this.yTicks = _arg.yTicks, includeAnnotationsFrom = _arg.includeAnnotationsFrom, this.showCrossHairs = _arg.showCrossHairs, this.showGraphGrid = _arg.showGraphGrid, this.showToolTipCoords = _arg.showToolTipCoords, this.includedDataSets = _arg.includedDataSets, this.labelSets = _arg.labelSets;
       this.activeDataSetIndex = 0;
       this.totalDatasetsIndex = 0;
       this.activeDatasetName;
       this.datadefRef = [];
       if (!this.includedDataSets) this.includedDataSets = [];
+      if (!this.labelSets) this.labelSets = [];
       this.annotationSources = includeAnnotationsFrom != null ? includeAnnotationsFrom.map(function(source) {
         var page, pane, _ref;
         _ref = (source.match(/^page\/(\d)+\/pane\/(\d)+$/)).slice(1, 3).map(function(s) {
@@ -981,6 +1050,7 @@ require.define("/author/author-panes.js", function (require, module, exports, __
 
     GraphPane.prototype.addToPageAndActivity = function(runtimePage, runtimeActivity) {
       var dataKey, dataRef, populatedDataDef, populatedDataDefs, populatedDataSets, _i, _j, _len, _len2, _ref;
+      this.runtimeActivity = runtimeActivity;
       if (this.includedDataSets != null) {
         if (this.includedDataSets.length !== 0) {
           populatedDataSets = runtimeActivity.populateDataSet(this.xLabel, this.yLabel, this.includedDataSets);
@@ -1026,7 +1096,7 @@ require.define("/author/author-panes.js", function (require, module, exports, __
     };
 
     GraphPane.prototype.addToStep = function(step) {
-      var _ref,
+      var createdAnnotation, labelSetName, _i, _j, _len, _len2, _ref, _ref2, _ref3,
         _this = this;
       step.addGraphPane({
         title: this.title,
@@ -1039,9 +1109,28 @@ require.define("/author/author-panes.js", function (require, module, exports, __
         showToolTipCoords: this.showToolTipCoords,
         includedDataSets: this.includedDataSets,
         activeDatasetName: this.activeDatasetName,
-        dataRef: this.dataRef
+        dataRef: this.dataRef,
+        labelSets: this.labelSets
       });
-      return (_ref = this.annotationSources) != null ? _ref.forEach(function(source) {
+      if (this.labelSets) {
+        _ref = this.labelSets;
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          labelSetName = _ref[_i];
+          if (this.runtimeActivity.annotations['LabelSet']) {
+            _ref2 = this.runtimeActivity.annotations['LabelSet'];
+            for (_j = 0, _len2 = _ref2.length; _j < _len2; _j++) {
+              createdAnnotation = _ref2[_j];
+              if (createdAnnotation.name === labelSetName) {
+                step.addAnnotationToPane({
+                  annotation: createdAnnotation,
+                  index: this.index
+                });
+              }
+            }
+          }
+        }
+      }
+      return (_ref3 = this.annotationSources) != null ? _ref3.forEach(function(source) {
         var page, pages, pane;
         pages = _this.page.activity.pages;
         page = pages[source.page];
@@ -1974,27 +2063,75 @@ require.define("/author/line_construction_sequence.js", function (require, modul
 
   exports.LineConstructionSequence = LineConstructionSequence = (function() {
 
+    function LineConstructionSequence(_arg) {
+      var i, pane, _len, _ref;
+      this.slope = _arg.slope, this.slopeTolerance = _arg.slopeTolerance, this.yIntercept = _arg.yIntercept, this.yInterceptTolerance = _arg.yInterceptTolerance, this.initialPrompt = _arg.initialPrompt, this.confirmCorrect = _arg.confirmCorrect, this.slopeIncorrect = _arg.slopeIncorrect, this.yInterceptIncorrect = _arg.yInterceptIncorrect, this.allIncorrect = _arg.allIncorrect, this.giveUp = _arg.giveUp, this.maxAttempts = _arg.maxAttempts, this.page = _arg.page, this.dataSetName = _arg.dataSetName;
+      if (this.maxAttempts === 0) {
+        throw new Error("Number of attempts should be more than 0");
+      }
+      this.correctLineDataRef;
+      this.correctLineDataDef;
+      this.correctLineColor;
+      this.correctLineDataSetName = "CorrectLine-" + this.page.index;
+      this.steps = [];
+      this.specialSteps = [];
+      this.runtimeStepsByName = {};
+      _ref = this.page.panes || [];
+      for (i = 0, _len = _ref.length; i < _len; i++) {
+        pane = _ref[i];
+        if (pane instanceof AuthorPane.classFor["PredefinedGraphPane"]) {
+          this.graphPane = pane;
+        }
+        if (pane instanceof AuthorPane.classFor["TablePane"]) {
+          this.tablePane = pane;
+        }
+      }
+      if (this.dataSetName) this.graphPane.activeDatasetName = this.dataSetName;
+      if (!this.maxAttempts) this.maxAttempts = 1;
+    }
+
     LineConstructionSequence.prototype.getDataDefRef = function(runtimeActivity) {
       if (this.graphPane == null) return null;
       return runtimeActivity.getDatadefRef("" + this.graphPane.activeDatasetName);
     };
 
     LineConstructionSequence.prototype.setupStep = function(_arg) {
-      var annotation, response_def, runtimePage, step, stepdef, tool, _i, _j, _k, _len, _len2, _len3, _ref, _ref2, _ref3;
-      runtimePage = _arg.runtimePage, stepdef = _arg.stepdef;
+      var annotation, dataDefRefForStep, hasAnswer, legendsDataset, response_def, runtimePage, step, stepDataDefRef, stepDataRefs, stepIncludedDataSets, stepdef, tool, _i, _j, _k, _len, _len2, _len3, _ref, _ref2, _ref3;
+      runtimePage = _arg.runtimePage, stepdef = _arg.stepdef, hasAnswer = _arg.hasAnswer;
+      dataDefRefForStep = this.graphPane.datadefRef;
       step = this.runtimeStepsByName[stepdef.name];
+      stepDataDefRef = [];
+      stepIncludedDataSets = [];
+      stepDataRefs = [];
+      legendsDataset = [this.learnerDataSet];
+      if (hasAnswer === "true") {
+        stepDataRefs = this.graphPane.dataRef.concat(this.correctLineDataRef);
+        stepDataDefRef = dataDefRefForStep.concat({
+          key: this.correctLineDataSetName,
+          datadef: this.correctLineDataDef
+        });
+        stepIncludedDataSets = this.graphPane.includedDataSets.concat({
+          name: this.correctLineDataSetName,
+          inLegend: true
+        });
+        legendsDataset.push(this.correctLineDataSetName);
+      } else {
+        stepDataRefs = this.graphPane.dataRef ? this.graphPane.dataRef : [];
+        stepDataDefRef = dataDefRefForStep;
+        stepIncludedDataSets = this.graphPane.includedDataSets;
+      }
       step.addGraphPane({
         title: this.graphPane.title,
-        datadefRef: this.graphPane.datadefRef,
+        datadefRef: stepDataDefRef,
         xAxis: this.xAxis,
         yAxis: this.yAxis,
         index: this.graphPane.index,
         showCrossHairs: stepdef.showCrossHairs,
         showGraphGrid: stepdef.showGraphGrid,
         showToolTipCoords: stepdef.showToolTipCoords,
-        includedDataSets: this.graphPane.includedDataSets,
+        includedDataSets: stepIncludedDataSets,
         activeDatasetName: this.graphPane.activeDatasetName,
-        dataRef: this.graphPane.dataRef ? this.graphPane.dataRef : []
+        dataRef: stepDataRefs
       });
       step.addTablePane({
         datadefRef: this.getDataDefRef(runtimePage.activity),
@@ -2028,7 +2165,6 @@ require.define("/author/line_construction_sequence.js", function (require, modul
           shape: "singleLine"
         });
       }
-      step.defaultBranch = this.runtimeStepsByName[stepdef.defaultBranch];
       _ref3 = stepdef.responseBranches || [];
       for (_k = 0, _len3 = _ref3.length; _k < _len3; _k++) {
         response_def = _ref3[_k];
@@ -2040,47 +2176,67 @@ require.define("/author/line_construction_sequence.js", function (require, modul
       return step;
     };
 
-    LineConstructionSequence.prototype.check_correct_answer = function() {
+    LineConstructionSequence.prototype.check_correct_answer = function(nCounter) {
+      var criterionArray, nextInterceptCorrect, nextSlopeCorrect;
+      criterionArray = [];
+      if ((nCounter + 1) < this.maxAttempts) {
+        nextSlopeCorrect = 'incorrect_answer_but_slope_correct_after_' + (nCounter + 1) + '_try';
+        nextInterceptCorrect = 'incorrect_answer_but_y_intercept_correct_after_' + (nCounter + 1) + '_try';
+        criterionArray = [
+          {
+            "criterion": ["and", ["withinAbsTolerance", this.slope, ["lineSlope", this.annotations["singleLineGraphing"].name, 1], this.slopeTolerance], ["withinAbsTolerance", this.yIntercept, ["yIntercept", this.annotations["singleLineGraphing"].name, 1], this.yInterceptTolerance]],
+            "step": "confirm_correct"
+          }, {
+            "criterion": ["withinAbsTolerance", this.slope, ["lineSlope", this.annotations["singleLineGraphing"].name, 1], this.slopeTolerance],
+            "step": nextSlopeCorrect
+          }, {
+            "criterion": ["withinAbsTolerance", this.yIntercept, ["yIntercept", this.annotations["singleLineGraphing"].name, 1], this.yInterceptTolerance],
+            "step": nextInterceptCorrect
+          }
+        ];
+      } else {
+        criterionArray = [
+          {
+            "criterion": ["and", ["withinAbsTolerance", this.slope, ["lineSlope", this.annotations["singleLineGraphing"].name, 1], this.slopeTolerance], ["withinAbsTolerance", this.yIntercept, ["yIntercept", this.annotations["singleLineGraphing"].name, 1], this.yInterceptTolerance]],
+            "step": "confirm_correct"
+          }
+        ];
+      }
+      return criterionArray;
+    };
+
+    LineConstructionSequence.prototype.check_final_answer = function() {
       return [
         {
           "criterion": ["and", ["withinAbsTolerance", this.slope, ["lineSlope", this.annotations["singleLineGraphing"].name, 1], this.slopeTolerance], ["withinAbsTolerance", this.yIntercept, ["yIntercept", this.annotations["singleLineGraphing"].name, 1], this.yInterceptTolerance]],
           "step": "confirm_correct"
-        }, {
-          "criterion": ["withinAbsTolerance", this.slope, ["lineSlope", this.annotations["singleLineGraphing"].name, 1], this.slopeTolerance],
-          "step": "incorrect_answer_but_slope_correct"
-        }, {
-          "criterion": ["withinAbsTolerance", this.yIntercept, ["yIntercept", this.annotations["singleLineGraphing"].name, 1], this.yInterceptTolerance],
-          "step": "incorrect_answer_but_y_intercept_correct"
         }
       ];
     };
 
-    function LineConstructionSequence(_arg) {
-      var i, pane, _len, _ref;
-      this.slope = _arg.slope, this.slopeTolerance = _arg.slopeTolerance, this.yIntercept = _arg.yIntercept, this.yInterceptTolerance = _arg.yInterceptTolerance, this.initialPrompt = _arg.initialPrompt, this.confirmCorrect = _arg.confirmCorrect, this.slopeIncorrect = _arg.slopeIncorrect, this.yInterceptIncorrect = _arg.yInterceptIncorrect, this.allIncorrect = _arg.allIncorrect, this.page = _arg.page, this.dataSetName = _arg.dataSetName;
-      this.steps = [];
-      this.runtimeStepsByName = {};
-      _ref = this.page.panes || [];
-      for (i = 0, _len = _ref.length; i < _len; i++) {
-        pane = _ref[i];
-        if (pane instanceof AuthorPane.classFor["PredefinedGraphPane"]) {
-          this.graphPane = pane;
-        }
-        if (pane instanceof AuthorPane.classFor["TablePane"]) {
-          this.tablePane = pane;
-        }
-      }
-      if (this.dataSetName) this.graphPane.activeDatasetName = this.dataSetName;
-    }
+    LineConstructionSequence.prototype.get_correctSlopeLine = function(runtimeActivity, graphPane) {
+      var NewEmptyData, correctLineExpression, negated_sign_char;
+      this.correctLineSlope = this.slope;
+      this.correctLineIntercept = this.yIntercept;
+      negated_sign_char = this.correctLineIntercept >= 0 ? '+' : '-';
+      correctLineExpression = 'y = ' + this.correctLineSlope + 'x' + negated_sign_char + Math.abs(this.correctLineIntercept);
+      this.correctLineColor = runtimeActivity.getNewColor();
+      debugger;
+      NewEmptyData = runtimeActivity.createNewEmptyDataRef(this.correctLineDataSetName, correctLineExpression, 0.1, 0, this.correctLineColor);
+      this.correctLineDataDef = NewEmptyData.dataDef;
+      this.correctLineDataRef = NewEmptyData.dataRef;
+      return this.correctLineDataDef;
+    };
 
     LineConstructionSequence.prototype.appendSteps = function(runtimePage) {
-      var annotation, otherAnnotations, runtimeActivity, runtimeStep, stepdef, _i, _j, _k, _len, _len2, _len3, _ref, _ref2, _results;
+      var annotation, otherAnnotations, runtimeActivity, runtimeStep, stepdef, _i, _j, _k, _l, _len, _len2, _len3, _len4, _len5, _m, _ref, _ref2, _ref3, _ref4, _results;
       this.annotations = {};
       this.yAxis = this.graphPane.yAxis;
       this.xAxis = this.graphPane.xAxis;
       this.x_axis_name = this.xAxis.label.toLowerCase();
       this.y_axis_name = this.yAxis.label.toLowerCase();
       runtimeActivity = runtimePage.activity;
+      this.get_correctSlopeLine(runtimeActivity, this.graphPane);
       this.datadefRef = this.getDataDefRef(runtimeActivity);
       this.tags = {};
       this.annotations = {};
@@ -2103,13 +2259,28 @@ require.define("/author/line_construction_sequence.js", function (require, modul
         runtimeStep = runtimePage.appendStep();
         this.runtimeStepsByName[stepdef.name] = runtimeStep;
       }
-      _ref2 = this.steps;
-      _results = [];
+      _ref2 = this.specialSteps;
       for (_k = 0, _len3 = _ref2.length; _k < _len3; _k++) {
         stepdef = _ref2[_k];
-        _results.push(this.setupStep({
+        runtimeStep = runtimePage.appendStep();
+        this.runtimeStepsByName[stepdef.name] = runtimeStep;
+      }
+      _ref3 = this.steps;
+      for (_l = 0, _len4 = _ref3.length; _l < _len4; _l++) {
+        stepdef = _ref3[_l];
+        this.setupStep({
           stepdef: stepdef,
           runtimePage: runtimePage
+        });
+      }
+      _ref4 = this.specialSteps;
+      _results = [];
+      for (_m = 0, _len5 = _ref4.length; _m < _len5; _m++) {
+        stepdef = _ref4[_m];
+        _results.push(this.setupStep({
+          stepdef: stepdef,
+          runtimePage: runtimePage,
+          hasAnswer: "true"
         }));
       }
       return _results;
@@ -2118,7 +2289,7 @@ require.define("/author/line_construction_sequence.js", function (require, modul
     LineConstructionSequence.prototype.first_question = function() {
       return {
         name: "question",
-        defaultBranch: "incorrect_answer_all",
+        defaultBranch: this.maxAttempts === 1 ? "attempts_over" : "incorrect_answer_all_after_1_try",
         submitButtonTitle: "Check My Answer",
         beforeText: this.initialPrompt,
         substitutedExpressions: [],
@@ -2129,14 +2300,14 @@ require.define("/author/line_construction_sequence.js", function (require, modul
         graphAnnotations: ["singleLineGraphing"],
         tableAnnotations: [],
         tools: ["graphing"],
-        responseBranches: this.check_correct_answer()
+        responseBranches: this.check_correct_answer(0)
       };
     };
 
-    LineConstructionSequence.prototype.incorrect_answer_all = function() {
+    LineConstructionSequence.prototype.incorrect_answer_all_after_try = function(nCounter) {
       return {
-        name: "incorrect_answer_all",
-        defaultBranch: "incorrect_answer_all",
+        name: "incorrect_answer_all_after_" + nCounter + "_try",
+        defaultBranch: (nCounter + 1) < this.maxAttempts ? "incorrect_answer_all_after_" + (nCounter + 1) + "_try" : "attempts_over",
         submitButtonTitle: "Check My Answer",
         beforeText: "<b>" + this.allIncorrect + "</b><p>" + this.initialPrompt + "</p>",
         substitutedExpressions: [],
@@ -2147,14 +2318,14 @@ require.define("/author/line_construction_sequence.js", function (require, modul
         graphAnnotations: ["singleLineGraphing"],
         tableAnnotations: [],
         tools: ["graphing"],
-        responseBranches: this.check_correct_answer()
+        responseBranches: this.check_correct_answer(nCounter)
       };
     };
 
-    LineConstructionSequence.prototype.incorrect_answer_but_y_intercept_correct = function() {
+    LineConstructionSequence.prototype.incorrect_answer_but_y_intercept_correct_after_try = function(nCounter) {
       return {
-        name: "incorrect_answer_but_y_intercept_correct",
-        defaultBranch: "incorrect_answer_all",
+        name: "incorrect_answer_but_y_intercept_correct_after_" + nCounter + "_try",
+        defaultBranch: (nCounter + 1) < this.maxAttempts ? "incorrect_answer_all_after_" + (nCounter + 1) + "_try" : "attempts_over",
         submitButtonTitle: "Check My Answer",
         beforeText: "<b>" + this.slopeIncorrect + "</b><p>" + this.initialPrompt + "</p>",
         substitutedExpressions: [],
@@ -2165,14 +2336,14 @@ require.define("/author/line_construction_sequence.js", function (require, modul
         graphAnnotations: ["singleLineGraphing"],
         tableAnnotations: [],
         tools: ["graphing"],
-        responseBranches: this.check_correct_answer()
+        responseBranches: this.check_correct_answer(nCounter)
       };
     };
 
-    LineConstructionSequence.prototype.incorrect_answer_but_slope_correct = function() {
+    LineConstructionSequence.prototype.incorrect_answer_but_slope_correct_after_try = function(nCounter) {
       return {
-        name: "incorrect_answer_but_slope_correct",
-        defaultBranch: "incorrect_answer_all",
+        name: "incorrect_answer_but_slope_correct_after_" + nCounter + "_try",
+        defaultBranch: (nCounter + 1) < this.maxAttempts ? "incorrect_answer_all_after_" + (nCounter + 1) + "_try" : "attempts_over",
         submitButtonTitle: "Check My Answer",
         beforeText: "<b>" + this.yInterceptIncorrect + "</b><p>" + this.initialPrompt + "</p>",
         substitutedExpressions: [],
@@ -2183,7 +2354,20 @@ require.define("/author/line_construction_sequence.js", function (require, modul
         graphAnnotations: ["singleLineGraphing"],
         tableAnnotations: [],
         tools: ["graphing"],
-        responseBranches: this.check_correct_answer()
+        responseBranches: this.check_correct_answer(nCounter)
+      };
+    };
+
+    LineConstructionSequence.prototype.attempts_over = function() {
+      return {
+        name: "attempts_over",
+        isFinalStep: true,
+        hideSubmitButton: true,
+        beforeText: "<b>" + this.giveUp + "</b>",
+        showCrossHairs: false,
+        showToolTipCoords: false,
+        showGraphGrid: this.graphPane.showGraphGrid,
+        graphAnnotations: ["singleLineGraphing"]
       };
     };
 
@@ -2201,11 +2385,17 @@ require.define("/author/line_construction_sequence.js", function (require, modul
     };
 
     LineConstructionSequence.prototype.assemble_steps = function() {
+      var nCounter;
+      nCounter = 1;
       this.steps.push(this.first_question());
-      this.steps.push(this.incorrect_answer_all());
-      this.steps.push(this.incorrect_answer_but_y_intercept_correct());
-      this.steps.push(this.incorrect_answer_but_slope_correct());
-      return this.steps.push(this.confirm_correct());
+      while (nCounter < this.maxAttempts) {
+        this.steps.push(this.incorrect_answer_all_after_try(nCounter));
+        this.steps.push(this.incorrect_answer_but_y_intercept_correct_after_try(nCounter));
+        this.steps.push(this.incorrect_answer_but_slope_correct_after_try(nCounter));
+        nCounter++;
+      }
+      this.specialSteps.push(this.attempts_over());
+      return this.specialSteps.push(this.confirm_correct());
     };
 
     return LineConstructionSequence;
@@ -2226,7 +2416,7 @@ require.define("/author/best_fit_sequence.js", function (require, module, export
 
     function BestFitSequence(_arg) {
       var i, pane, _len, _ref;
-      this.type = _arg.type, this.dataSetName = _arg.dataSetName, this.learnerDataSet = _arg.learnerDataSet, this.correctTolerance = _arg.correctTolerance, this.closeTolerance = _arg.closeTolerance, this.initialPrompt = _arg.initialPrompt, this.incorrectPrompt = _arg.incorrectPrompt, this.closePrompt = _arg.closePrompt, this.confirmCorrect = _arg.confirmCorrect, this.maxAttempts = _arg.maxAttempts, this.page = _arg.page;
+      this.type = _arg.type, this.dataSetName = _arg.dataSetName, this.learnerDataSet = _arg.learnerDataSet, this.correctTolerance = _arg.correctTolerance, this.closeTolerance = _arg.closeTolerance, this.initialPrompt = _arg.initialPrompt, this.incorrectPrompt = _arg.incorrectPrompt, this.closePrompt = _arg.closePrompt, this.confirmCorrect = _arg.confirmCorrect, this.giveUp = _arg.giveUp, this.maxAttempts = _arg.maxAttempts, this.page = _arg.page;
       if (this.maxAttempts === 0) {
         throw new Error("Number of attempts should be more than 0");
       }
@@ -2350,13 +2540,13 @@ require.define("/author/best_fit_sequence.js", function (require, module, export
     };
 
     BestFitSequence.prototype.check_correct_answer = function(nCounter) {
-      var closeTolerance, correctTolerance, criterianArray, nextCloseCorrect;
-      criterianArray = [];
+      var closeTolerance, correctTolerance, criterionArray, nextCloseCorrect;
+      criterionArray = [];
       correctTolerance = this.SumofSquares * this.correctTolerance / 100;
       closeTolerance = this.SumofSquares * this.closeTolerance / 100;
       if ((nCounter + 1) < this.maxAttempts) {
         nextCloseCorrect = 'close_answer_after_' + (nCounter + 1) + '_try';
-        criterianArray = [
+        criterionArray = [
           {
             "criterion": ["withinAbsTolerance", this.SumofSquares, ["deviationValue", this.learnerDataSet], correctTolerance],
             "step": 'correct_answer'
@@ -2366,14 +2556,14 @@ require.define("/author/best_fit_sequence.js", function (require, module, export
           }
         ];
       } else {
-        criterianArray = [
+        criterionArray = [
           {
             "criterion": ["withinAbsTolerance", this.SumofSquares, ["deviationValue", this.learnerDataSet], correctTolerance],
             "step": 'correct_answer'
           }
         ];
       }
-      return criterianArray;
+      return criterionArray;
     };
 
     BestFitSequence.prototype.check_final_answer = function() {
@@ -2563,7 +2753,7 @@ require.define("/author/best_fit_sequence.js", function (require, module, export
         name: "attempts_over",
         isFinalStep: true,
         hideSubmitButton: true,
-        beforeText: "<b>Your estimate is incorrect.</b>",
+        beforeText: "<b>" + this.giveUp + "</b>",
         showCrossHairs: false,
         showToolTipCoords: false,
         showGraphGrid: this.graphPane.showGraphGrid,
@@ -2681,11 +2871,12 @@ require.define("/runtime/runtime-activity.js", function (require, module, export
 
   exports.RuntimeActivity = RuntimeActivity = (function() {
 
-    function RuntimeActivity(owner, name, authorName, datasets) {
+    function RuntimeActivity(owner, name, authorName, datasets, labelSets) {
       this.owner = owner;
       this.name = name;
       this.authorName = authorName;
       this.datasets = datasets;
+      this.labelSets = labelSets;
       this.pages = [];
       this.steps = [];
       this.unitRefs = {};
@@ -3005,8 +3196,15 @@ require.define("/runtime/runtime-activity.js", function (require, module, export
     };
 
     RuntimeActivity.prototype.createAndAppendAnnotation = function(hash) {
-      var AnnotationClass, annotation, type, _base, _base2;
+      var AnnotationClass, annotation, createdAnnotation, type, _base, _base2, _i, _len, _ref2;
       type = hash.type;
+      if (this.annotations[type]) {
+        _ref2 = this.annotations[type];
+        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+          createdAnnotation = _ref2[_i];
+          if (createdAnnotation.name === hash.name) return createdAnnotation;
+        }
+      }
       AnnotationClass = AnnotationCollection.classFor[type];
       if ((_base = this.annotationCounts)[type] == null) _base[type] = 0;
       hash.index = ++this.annotationCounts[type];
@@ -3586,17 +3784,40 @@ require.define("/runtime/step.js", function (require, module, exports, __dirname
     };
 
     Step.prototype.addTaggingTool = function(_arg) {
-      var datadefRef, tag;
-      tag = _arg.tag, datadefRef = _arg.datadefRef;
+      var datadefRef, labelName, tag;
+      tag = _arg.tag, datadefRef = _arg.datadefRef, labelName = _arg.labelName;
       return this.tools['tagging'] = {
         tag: tag,
         datadefRef: datadefRef,
+        labelName: labelName,
         toHash: function() {
           return {
             name: 'tagging',
             setup: {
               tag: this.tag.name,
-              data: this.datadefRef.datadef.name
+              data: this.datadefRef.datadef.name,
+              labelName: this.labelName
+            }
+          };
+        }
+      };
+    };
+
+    Step.prototype.addLabelTool = function(_arg) {
+      var allowCoordinatesChange, datadefRef, index, labelName, markOnDataPoints;
+      labelName = _arg.labelName, index = _arg.index, datadefRef = _arg.datadefRef, markOnDataPoints = _arg.markOnDataPoints, allowCoordinatesChange = _arg.allowCoordinatesChange;
+      return this.tools['label'] = {
+        pane: index === 0 ? 'top' : 'bottom',
+        datadefRef: datadefRef,
+        toHash: function() {
+          return {
+            name: 'label',
+            setup: {
+              pane: this.pane,
+              labelName: labelName,
+              markOnDataPoints: markOnDataPoints,
+              datadefName: this.datadefRef.datadef.name,
+              allowCoordinatesChange: allowCoordinatesChange
             }
           };
         }
@@ -4078,7 +4299,7 @@ require.define("/runtime/annotations.js", function (require, module, exports, __
 */
 
 (function() {
-  var Annotation, AnnotationCollection, FreehandSketch, HighlightedPoint, LineThroughPoints, PointAxisLineVisualPrompt, PointCircleVisualPrompt, RangeVisualPrompt, RiseArrow, RiseBracket, RunArrow, RunBracket, SimpleAnnotation, annotations,
+  var Annotation, AnnotationCollection, FreehandSketch, HighlightedPoint, Label, LabelSet, LineThroughPoints, PointAxisLineVisualPrompt, PointCircleVisualPrompt, RangeVisualPrompt, RiseArrow, RiseBracket, RunArrow, RunBracket, SimpleAnnotation, annotations,
     __hasProp = Object.prototype.hasOwnProperty,
     __extends = function(child, parent) { for (var key in parent) { if (__hasProp.call(parent, key)) child[key] = parent[key]; } function ctor() { this.constructor = child; } ctor.prototype = parent.prototype; child.prototype = new ctor; child.__super__ = parent.prototype; return child; };
 
@@ -4283,6 +4504,59 @@ require.define("/runtime/annotations.js", function (require, module, exports, __
     };
 
     return SimpleAnnotation;
+
+  })(Annotation);
+
+  AnnotationCollection.classFor["Label"] = exports.Label = Label = (function(_super) {
+
+    __extends(Label, _super);
+
+    Label.prototype.RECORD_TYPE = 'Label';
+
+    function Label(_arg) {
+      this.index = _arg.index, this.point = _arg.point, this.text = _arg.text, this.name = _arg.name, this.namePrefix = _arg.namePrefix, this.offset = _arg.offset;
+      if (this.namePrefix == null) this.namePrefix = 'label';
+      if (this.name == null) this.name = "" + this.namePrefix + "-" + this.index;
+      if (this.offset == null) this.offset = [void 0, void 0];
+      if (this.point == null) this.point = [void 0, void 0];
+    }
+
+    Label.prototype.toHash = function() {
+      var hash;
+      hash = Label.__super__.toHash.call(this);
+      hash.text = this.text;
+      hash.x = this.point[0];
+      hash.y = this.point[1];
+      hash.xOffset = this.offset[0];
+      hash.yOffset = this.offset[1];
+      return hash;
+    };
+
+    return Label;
+
+  })(Annotation);
+
+  AnnotationCollection.classFor["LabelSet"] = exports.LabelSet = LabelSet = (function(_super) {
+
+    __extends(LabelSet, _super);
+
+    LabelSet.prototype.RECORD_TYPE = 'LabelSet';
+
+    LabelSet.prototype.namePrefix = 'labelSet';
+
+    function LabelSet(_arg) {
+      this.index = _arg.index, this.labels = _arg.labels, this.name = _arg.name;
+      if (this.name == null) this.name = "" + this.namePrefix + "-" + this.index;
+    }
+
+    LabelSet.prototype.toHash = function() {
+      var hash;
+      hash = LabelSet.__super__.toHash.call(this);
+      hash.labels = this.labels;
+      return hash;
+    };
+
+    return LabelSet;
 
   })(Annotation);
 

@@ -2,24 +2,69 @@
 
 exports.LineConstructionSequence = class LineConstructionSequence
   
+  constructor: ({
+    @slope,
+    @slopeTolerance,
+    @yIntercept,
+    @yInterceptTolerance,
+    @initialPrompt,
+    @confirmCorrect,
+    @slopeIncorrect,
+    @yInterceptIncorrect,
+    @allIncorrect,
+    @giveUp,
+    @maxAttempts,
+    @page,
+    @dataSetName
+    }) ->
+    if @maxAttempts is 0 then throw new Error "Number of attempts should be more than 0"
+    @correctLineDataRef
+    @correctLineDataDef
+    @correctLineColor
+    @correctLineDataSetName = "CorrectLine-"+ @page.index
+    @steps = []
+    @specialSteps = []
+    @runtimeStepsByName = {}
+    for pane, i in @page.panes || []
+      @graphPane = pane if pane instanceof AuthorPane.classFor["PredefinedGraphPane"]
+      @tablePane = pane if pane instanceof AuthorPane.classFor["TablePane"]
+
+    if @dataSetName then @graphPane.activeDatasetName = @dataSetName
+    @maxAttempts = 1 unless @maxAttempts
+
   getDataDefRef: (runtimeActivity) ->
     return null unless @graphPane?
     runtimeActivity.getDatadefRef "#{@graphPane.activeDatasetName}"
 
-  setupStep: ({runtimePage, stepdef}) ->
+  setupStep: ({runtimePage, stepdef, hasAnswer}) ->
+    dataDefRefForStep = @graphPane.datadefRef
     step = @runtimeStepsByName[stepdef.name]
+    stepDataDefRef = []
+    stepIncludedDataSets = []
+    stepDataRefs = []
+    legendsDataset = [@learnerDataSet]
+    if hasAnswer is "true"
+      stepDataRefs = @graphPane.dataRef.concat(@correctLineDataRef)
+      stepDataDefRef = dataDefRefForStep.concat({ key: @correctLineDataSetName, datadef: @correctLineDataDef })
+      stepIncludedDataSets = @graphPane.includedDataSets.concat({ name: @correctLineDataSetName, inLegend: true })
+      legendsDataset.push @correctLineDataSetName
+    else
+      stepDataRefs = if @graphPane.dataRef then @graphPane.dataRef else []
+      stepDataDefRef = dataDefRefForStep
+      stepIncludedDataSets = @graphPane.includedDataSets
+
     step.addGraphPane
       title: @graphPane.title
-      datadefRef: @graphPane.datadefRef
+      datadefRef: stepDataDefRef
       xAxis: @xAxis
       yAxis: @yAxis
       index: @graphPane.index
       showCrossHairs: stepdef.showCrossHairs
       showGraphGrid: stepdef.showGraphGrid
       showToolTipCoords: stepdef.showToolTipCoords
-      includedDataSets: @graphPane.includedDataSets
+      includedDataSets: stepIncludedDataSets
       activeDatasetName: @graphPane.activeDatasetName
-      dataRef: if @graphPane.dataRef then @graphPane.dataRef else []
+      dataRef: stepDataRefs
     step.addTablePane
       datadefRef: @getDataDefRef(runtimePage.activity)
       index: @tablePane.index
@@ -46,51 +91,64 @@ exports.LineConstructionSequence = class LineConstructionSequence
         annotation: @annotations["singleLineGraphing"]
         shape: "singleLine"
            
-    step.defaultBranch = @runtimeStepsByName[stepdef.defaultBranch]
     for response_def in stepdef.responseBranches || []
       step.appendResponseBranch
         criterion: response_def.criterion
         step: @runtimeStepsByName[response_def.step]
     step
   
-  check_correct_answer:->
+  check_correct_answer:(nCounter) ->
+    criterionArray = []
+    if((nCounter+1) < @maxAttempts)
+      nextSlopeCorrect = 'incorrect_answer_but_slope_correct_after_'+(nCounter+1)+'_try'
+      nextInterceptCorrect = 'incorrect_answer_but_y_intercept_correct_after_'+(nCounter+1)+'_try'
+      criterionArray = [
+                          {
+                            "criterion": ["and", [ "withinAbsTolerance", @slope, ["lineSlope", @annotations["singleLineGraphing"].name, 1], @slopeTolerance],
+                                        [ "withinAbsTolerance", @yIntercept, ["yIntercept", @annotations["singleLineGraphing"].name, 1], @yInterceptTolerance] ],
+                            "step": "confirm_correct"
+                          },
+                          {
+                            "criterion": [ "withinAbsTolerance", @slope, ["lineSlope", @annotations["singleLineGraphing"].name, 1], @slopeTolerance ],
+                            "step": nextSlopeCorrect
+                          },
+                          {
+                            "criterion": [ "withinAbsTolerance", @yIntercept, ["yIntercept", @annotations["singleLineGraphing"].name, 1], @yInterceptTolerance ] ,
+                            "step": nextInterceptCorrect
+                          }
+                        ]
+    else
+      criterionArray = [
+                          {
+                            "criterion": ["and", [ "withinAbsTolerance", @slope, ["lineSlope", @annotations["singleLineGraphing"].name, 1], @slopeTolerance],
+                                        [ "withinAbsTolerance", @yIntercept, ["yIntercept", @annotations["singleLineGraphing"].name, 1], @yInterceptTolerance] ],
+                            "step": "confirm_correct"
+                          }
+                        ]
+    criterionArray
+
+  check_final_answer: ->
     [
       {
         "criterion": ["and", [ "withinAbsTolerance", @slope, ["lineSlope", @annotations["singleLineGraphing"].name, 1], @slopeTolerance],
                     [ "withinAbsTolerance", @yIntercept, ["yIntercept", @annotations["singleLineGraphing"].name, 1], @yInterceptTolerance] ],
         "step": "confirm_correct"
-      },
-      {
-        "criterion": [ "withinAbsTolerance", @slope, ["lineSlope", @annotations["singleLineGraphing"].name, 1], @slopeTolerance ],
-        "step": "incorrect_answer_but_slope_correct"
-      },
-      {
-        "criterion": [ "withinAbsTolerance", @yIntercept, ["yIntercept", @annotations["singleLineGraphing"].name, 1], @yInterceptTolerance ] ,
-        "step": "incorrect_answer_but_y_intercept_correct"
       }
     ]
     
-  constructor: ({
-    @slope,
-    @slopeTolerance,
-    @yIntercept,
-    @yInterceptTolerance,
-    @initialPrompt,
-    @confirmCorrect,
-    @slopeIncorrect,
-    @yInterceptIncorrect,
-    @allIncorrect,
-    @page,
-    @dataSetName
-    }) ->
-    @steps = []
-    @runtimeStepsByName = {}
-    for pane, i in @page.panes || []
-      @graphPane = pane if pane instanceof AuthorPane.classFor["PredefinedGraphPane"]
-      @tablePane = pane if pane instanceof AuthorPane.classFor["TablePane"]
+  # Set up a dataset which holds the line of the correct answer
+  get_correctSlopeLine: (runtimeActivity, graphPane) ->
+    @correctLineSlope = @slope
+    @correctLineIntercept = @yIntercept
 
-    if @dataSetName then @graphPane.activeDatasetName = @dataSetName
- 
+    negated_sign_char = if @correctLineIntercept >= 0 then '+' else '-'
+    correctLineExpression = 'y = '+@correctLineSlope+'x' + (negated_sign_char) + Math.abs(@correctLineIntercept)
+    @correctLineColor = runtimeActivity.getNewColor()
+    NewEmptyData = runtimeActivity.createNewEmptyDataRef(@correctLineDataSetName, correctLineExpression , 0.1, 0, @correctLineColor)
+    @correctLineDataDef = NewEmptyData.dataDef
+    @correctLineDataRef = NewEmptyData.dataRef
+    @correctLineDataDef
+
   appendSteps: (runtimePage) ->
     @annotations = {}
   
@@ -101,6 +159,7 @@ exports.LineConstructionSequence = class LineConstructionSequence
     @y_axis_name = @yAxis.label.toLowerCase()
     
     runtimeActivity = runtimePage.activity
+    @get_correctSlopeLine runtimeActivity, @graphPane
     @datadefRef      = @getDataDefRef runtimeActivity
     @tags = {}
     @annotations = {}
@@ -112,17 +171,25 @@ exports.LineConstructionSequence = class LineConstructionSequence
     for stepdef in @steps
       runtimeStep = runtimePage.appendStep()
       @runtimeStepsByName[stepdef.name] = runtimeStep
+    for stepdef in @specialSteps
+      runtimeStep = runtimePage.appendStep()
+      @runtimeStepsByName[stepdef.name] = runtimeStep
     for stepdef in @steps
       @setupStep
         stepdef: stepdef
         runtimePage: runtimePage
+    for stepdef in @specialSteps
+      @setupStep
+        stepdef: stepdef
+        runtimePage: runtimePage
+        hasAnswer: "true"
   
   first_question: ->
     { ############################################
       ##         first_question             ##
       ############################################
       name:                         "question"
-      defaultBranch:                "incorrect_answer_all"
+      defaultBranch:                if @maxAttempts is 1 then "attempts_over" else "incorrect_answer_all_after_1_try"
       submitButtonTitle:            "Check My Answer"
       beforeText:                   @initialPrompt
       substitutedExpressions:       []
@@ -133,13 +200,13 @@ exports.LineConstructionSequence = class LineConstructionSequence
       graphAnnotations:             ["singleLineGraphing"]
       tableAnnotations:             []
       tools:                        ["graphing"]
-      responseBranches:             @check_correct_answer()
+      responseBranches:             @check_correct_answer(0)
     } 
     
-  incorrect_answer_all: ->
+  incorrect_answer_all_after_try: (nCounter) ->
     {
-      name:                        "incorrect_answer_all"
-      defaultBranch:               "incorrect_answer_all" 
+      name:                        "incorrect_answer_all_after_"+nCounter+"_try"
+      defaultBranch:               if (nCounter+1) < @maxAttempts then "incorrect_answer_all_after_"+(nCounter+1)+"_try" else "attempts_over" 
       submitButtonTitle:           "Check My Answer"
       beforeText:                  "<b>#{@allIncorrect}</b><p>#{@initialPrompt}</p>"
       substitutedExpressions:      []
@@ -150,12 +217,12 @@ exports.LineConstructionSequence = class LineConstructionSequence
       graphAnnotations:            ["singleLineGraphing"]
       tableAnnotations:            []
       tools:                       ["graphing"]
-      responseBranches:            @check_correct_answer()
+      responseBranches:            @check_correct_answer(nCounter)
     }
-  incorrect_answer_but_y_intercept_correct: ->
+  incorrect_answer_but_y_intercept_correct_after_try: (nCounter) ->
     {
-      name:                        "incorrect_answer_but_y_intercept_correct"
-      defaultBranch:               "incorrect_answer_all" 
+      name:                        "incorrect_answer_but_y_intercept_correct_after_"+nCounter+"_try"
+      defaultBranch:               if (nCounter+1) < @maxAttempts then "incorrect_answer_all_after_"+(nCounter+1)+"_try" else "attempts_over"
       submitButtonTitle:           "Check My Answer"
       beforeText:                  "<b>#{@slopeIncorrect}</b><p>#{@initialPrompt}</p>"
       substitutedExpressions:      []
@@ -166,12 +233,12 @@ exports.LineConstructionSequence = class LineConstructionSequence
       graphAnnotations  :          ["singleLineGraphing"]
       tableAnnotations:            []
       tools:                       ["graphing"]
-      responseBranches:            @check_correct_answer()
+      responseBranches:            @check_correct_answer(nCounter)
     }    
-  incorrect_answer_but_slope_correct: ->
+  incorrect_answer_but_slope_correct_after_try: (nCounter) ->
     {
-      name:                       "incorrect_answer_but_slope_correct"
-      defaultBranch:              "incorrect_answer_all" 
+      name:                       "incorrect_answer_but_slope_correct_after_"+nCounter+"_try"
+      defaultBranch:              if (nCounter+1) < @maxAttempts then "incorrect_answer_all_after_"+(nCounter+1)+"_try" else "attempts_over"
       submitButtonTitle:          "Check My Answer"
       beforeText:                 "<b>#{@yInterceptIncorrect}</b><p>#{@initialPrompt}</p>"
       substitutedExpressions:     []
@@ -182,7 +249,18 @@ exports.LineConstructionSequence = class LineConstructionSequence
       graphAnnotations:           ["singleLineGraphing"]
       tableAnnotations:           []
       tools:                      ["graphing"]
-      responseBranches:           @check_correct_answer()
+      responseBranches:           @check_correct_answer(nCounter)
+    }
+  attempts_over: ->
+    {
+      name:                   "attempts_over"
+      isFinalStep:            true
+      hideSubmitButton:       true
+      beforeText:             "<b>#{@giveUp}</b>"
+      showCrossHairs:         false
+      showToolTipCoords:      false
+      showGraphGrid:          @graphPane.showGraphGrid
+      graphAnnotations  :     ["singleLineGraphing"]
     }
   confirm_correct: ->
     {
@@ -197,8 +275,14 @@ exports.LineConstructionSequence = class LineConstructionSequence
     }
    
   assemble_steps: ->
+    nCounter = 1
     @steps.push(@first_question())
-    @steps.push(@incorrect_answer_all())
-    @steps.push(@incorrect_answer_but_y_intercept_correct())
-    @steps.push(@incorrect_answer_but_slope_correct())
-    @steps.push(@confirm_correct())
+
+    while (nCounter) < @maxAttempts
+      @steps.push(@incorrect_answer_all_after_try(nCounter))
+      @steps.push(@incorrect_answer_but_y_intercept_correct_after_try(nCounter))
+      @steps.push(@incorrect_answer_but_slope_correct_after_try(nCounter))
+      nCounter++
+
+    @specialSteps.push(@attempts_over())
+    @specialSteps.push(@confirm_correct())
